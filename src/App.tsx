@@ -48,10 +48,16 @@ function App() {
 
   // Define the iCal sources (keys correspond to server routes /api/ical/:source)
   const ICAL_SOURCES = [
-    { key: 'unit-green', label: 'Unit Green', color: '#10B981', enabled: true },
-    { key: 'unit-red', label: 'Unit Red', color: '#EF4444', enabled: true },
-    { key: 'unit-grey', label: 'Unit Grey', color: '#9CA3AF', enabled: true },
+  { key: 'unit-green', label: 'Ap. 7 - Green', color: '#10B981', enabled: true },
+  { key: 'unit-red', label: 'Ap. 9 - Red', color: '#EF4444', enabled: true },
+  { key: 'unit-grey', label: 'Ap. 6 - Grey', color: '#9CA3AF', enabled: true },
   ];
+
+  const getLabelForUnit = (unitKey?: string) => {
+    if (!unitKey) return 'Unit';
+    const found = ICAL_SOURCES.find(s => s.key === unitKey);
+    return found ? found.label : unitKey;
+  };
 
   // Fetch iCal data from the backend on startup and merge into events
   useEffect(() => {
@@ -65,10 +71,10 @@ function App() {
             try {
               const imported = await parseICalFromUrl(src.key, provider);
               if (imported && imported.length > 0) {
-                // Ensure imported events have apartment, color, and provider set to this unit/provider
+                // Normalize imported events: set apartment to the unit key so timeline matching is consistent
                 const normalized = imported.map(ev => ({
                   ...ev,
-                  apartment: ev.apartment ?? src.label,
+                  apartment: src.key, // use unit key (e.g., 'unit-green')
                   color: ev.color ?? src.color,
                   provider: provider,
                 }));
@@ -104,7 +110,7 @@ function App() {
           if (imported && imported.length > 0) {
             const normalized = imported.map(ev => ({
               ...ev,
-              apartment: ev.apartment ?? src.label,
+              apartment: src.key,
               color: ev.color ?? src.color,
               provider: provider,
             }));
@@ -173,7 +179,6 @@ function App() {
           currentDate={currentDate}
           onPreviousMonth={handlePreviousMonth}
           onNextMonth={handleNextMonth}
-          onImportClick={handleRefreshImport}
           onAddEventClick={() => setIsAddEventModalOpen(true)}
         />
 
@@ -189,29 +194,89 @@ function App() {
           }}
         />
 
-        {/* Upcoming events list */}
+        {/* Upcoming events list grouped by year */}
         <div className="mt-6">
           <h2 className="text-lg font-semibold mb-2">Upcoming Events</h2>
-          <div className="space-y-2">
-            {events
-              .filter(e => e.endDate >= timelineStart)
-              .sort((a,b) => +a.startDate - +b.startDate)
-              .map(e => (
-                <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">{e.title}</div>
-                    <div className="text-xs text-gray-500">
-                      {e.apartment ?? 'Unit 1'} • {format(e.startDate, 'MMM d, HH:mm')} — {format(e.endDate, 'MMM d, HH:mm')}
+          <div className="space-y-4">
+            {(() => {
+              const upcoming = events.filter(e => e.endDate >= timelineStart).sort((a,b) => +a.startDate - +b.startDate);
+              if (upcoming.length === 0) return <div className="text-sm text-gray-500">No upcoming events</div>;
+
+              const now = new Date();
+              const thisYear = now.getFullYear();
+              const nextYear = thisYear + 1;
+
+              const thisYearEvents = upcoming.filter(e => e.startDate.getFullYear() === thisYear);
+              const nextYearEvents = upcoming.filter(e => e.startDate.getFullYear() === nextYear);
+              const laterEvents = upcoming.filter(e => e.startDate.getFullYear() > nextYear);
+
+              return (
+                <div className="space-y-3">
+                  {thisYearEvents.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 mb-2">This year</h3>
+                      <div className="space-y-2">
+                        {thisYearEvents.map(e => (
+                          <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-medium">{e.title}</div>
+                              <div className="text-xs text-gray-500">
+                                {getLabelForUnit(String(e.apartment))} • {format(e.startDate, 'MMM d, yyyy, HH:mm')} — {format(e.endDate, 'MMM d, yyyy, HH:mm')}
+                              </div>
+                            </div>
+                            <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
+                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>{/* color swatch */}
-                    <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
-                  </div>
+                  )}
+
+                  {nextYearEvents.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 mb-2">Next year</h3>
+                      <div className="space-y-2">
+                        {nextYearEvents.map(e => (
+                          <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-medium">{e.title}</div>
+                              <div className="text-xs text-gray-500">
+                                {e.apartment ?? 'Unit'} • {format(e.startDate, 'MMM d, yyyy, HH:mm')} — {format(e.endDate, 'MMM d, yyyy, HH:mm')}
+                              </div>
+                            </div>
+                            <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
+                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {laterEvents.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 mb-2">Future ({nextYear + 1} and beyond)</h3>
+                      <div className="space-y-2">
+                        {laterEvents.map(e => (
+                          <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-medium">{e.title}</div>
+                              <div className="text-xs text-gray-500">
+                                {e.apartment ?? 'Unit'} • {format(e.startDate, 'MMM d, yyyy, HH:mm')} — {format(e.endDate, 'MMM d, yyyy, HH:mm')}
+                              </div>
+                            </div>
+                            <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
+                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-            ))}
-            {events.filter(e => e.endDate >= timelineStart).length === 0 && (
-              <div className="text-sm text-gray-500">No upcoming events</div>
-            )}
+              );
+            })()}
           </div>
         </div>
 

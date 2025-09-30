@@ -24,10 +24,11 @@ export const TimelineCalendar: React.FC<TimelineCalendarProps> = ({
   const days = eachDayOfInterval({ start: startDate, end: endDate });
   const totalWidth = days.length * dayWidth;
 
-  // Derive apartments: prefer provided units prop, otherwise derive from events (fallback to 'Unit 1')
+  // Derive apartments: prefer provided units prop (as objects), otherwise derive from events
+  // apartments is an array of { key, label, color? }
   const apartments = units && units.length > 0
-    ? units.map((u: { key: string; label: string; color?: string }) => u.label)
-    : Array.from(new Set(events.map((e: CalendarEvent) => e.apartment ?? 'Unit 1')));
+    ? units.map((u: { key: string; label: string; color?: string }) => ({ key: u.key, label: u.label, color: u.color }))
+    : Array.from(new Set(events.map((e: CalendarEvent) => e.apartment ?? 'Unit 1'))).map((a: string) => ({ key: a, label: a }));
 
   const getDayIndex = (d: Date) => differenceInCalendarDays(d, startDate);
 
@@ -123,16 +124,16 @@ export const TimelineCalendar: React.FC<TimelineCalendarProps> = ({
 
       {/* rows */}
       <div className="max-h-[60vh] overflow-auto">
-        {apartments.map((apt: string, idx: number) => (
-          <div key={apt} className="flex items-start border-b bg-white">
+        {apartments.map((apt: { key: string; label: string; color?: string }) => (
+          <div key={apt.key || apt.label} className="flex items-start border-b bg-white">
             <div style={{ width: leftLabelWidth }} className="p-2 text-sm font-medium bg-gray-50 flex items-center">
               {/* show a colored swatch if units prop provided */}
-              {units && units[idx] && (
-                <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: (units[idx] as { color?: string }).color }} />
+              {apt.color && (
+                <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: apt.color }} />
               )}
-              {apt}
+              {apt.label}
             </div>
-            <div className="overflow-x-auto w-full relative" ref={el => { rowScrollRefs.current[apt] = el; }} onScroll={onRowScroll}>
+            <div className="overflow-x-auto w-full relative" ref={el => { rowScrollRefs.current[apt.key || apt.label] = el; }} onScroll={onRowScroll}>
               <div style={{ width: totalWidth, minHeight: 72 }} className="relative">
                 {/* vertical day separators (optional) */}
                 <div className="absolute inset-0">
@@ -145,7 +146,13 @@ export const TimelineCalendar: React.FC<TimelineCalendarProps> = ({
 
                 {/* events for this apartment (stacked if overlapping) */}
                 {(() => {
-                  const aptEvents = events.filter(e => (e.apartment ?? 'Unit 1') === apt);
+                  // Match events where apartment equals the unit label or the unit key (some imports store key)
+                  const aptEvents = events.filter(e => {
+                    const ap = e.apartment ?? '';
+                    const label = apt.label || '';
+                    const key = apt.key || '';
+                    return ap === label || ap === key || ap.toLowerCase() === label.toLowerCase();
+                  });
                   const { lanes, laneIndexById } = layoutEvents(aptEvents);
                   const laneHeight = 40; // px per stacked event
                   const containerHeight = Math.max(1, lanes.length) * laneHeight + 12;

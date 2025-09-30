@@ -1,12 +1,11 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Upload, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface CalendarHeaderProps {
   currentDate: Date;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
-  onImportClick: () => void;
   onAddEventClick: () => void;
 }
 
@@ -14,7 +13,6 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
   currentDate,
   onPreviousMonth,
   onNextMonth,
-  onImportClick,
   onAddEventClick
 }) => {
   return (
@@ -38,13 +36,6 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
       </div>
       
       <div className="flex space-x-3">
-        <button
-          onClick={onImportClick}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
-        >
-          <Upload className="w-4 h-4" />
-          <span>Import Calendar</span>
-        </button>
         <button
           onClick={onAddEventClick}
           className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"

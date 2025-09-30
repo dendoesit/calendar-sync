@@ -1,6 +1,5 @@
-import fetch from "node-fetch";
-
-// Configuration: per-unit, per-provider iCal URLs
+// Use the global fetch provided by the Netlify runtime (Node 18+). Do not import node-fetch here
+// to avoid pulling in fetch-blob/formdata-polyfill which can cause runtime errors in Netlify.
 import { ICAL_SOURCES } from '../../ical-sources.js';
 
 const fetchIcal = async (url) => {

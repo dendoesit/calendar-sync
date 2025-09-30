@@ -75,13 +75,13 @@ const parseICalData = (icalData: string, source = ''): CalendarEvent[] => {
     let defaultColor = '#10B981'; // default green
 
     if (sourceLower.includes('red')) {
-      apartment = 'Unit Red';
+      apartment = 'Ap. 9 - Red';
       defaultColor = '#EF4444';
     } else if (sourceLower.includes('grey') || sourceLower.includes('gray')) {
-      apartment = 'Unit Grey';
+      apartment = 'Ap. 6 - Grey';
       defaultColor = '#9CA3AF';
     } else if (sourceLower.includes('green')) {
-      apartment = 'Unit Green';
+      apartment = 'Ap. 7 - Green';
       defaultColor = '#10B981';
     }
 
