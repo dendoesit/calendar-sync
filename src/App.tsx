@@ -71,13 +71,18 @@ function App() {
           const imported = await parseICalFromUrl(src.key, provider);
           if (!imported || imported.length === 0) continue;
 
-          const normalized = imported.map(ev => ({
-            ...ev,
-            apartment: src.key,
-            color: ev.color ?? src.color,
-            provider,
-            type: ev.type ?? 'imported',
-          } as CalendarEvent));
+          const normalized = imported.map(ev => {
+            const title = (ev.title || '').toString().trim();
+            const normalizedTitle = title.toLowerCase() === 'closed not available' ? 'booking -rezervare' : title || 'Imported Booking';
+            return ({
+              ...ev,
+              title: normalizedTitle,
+              apartment: src.key,
+              color: ev.color ?? src.color,
+              provider,
+              type: ev.type ?? 'imported',
+            } as CalendarEvent);
+          });
 
           // basic verification: ensure startDate <= endDate
           const verified = normalized.filter(e => {
@@ -118,12 +123,17 @@ function App() {
               const imported = await parseICalFromUrl(src.key, provider);
               if (imported && imported.length > 0) {
                 // Normalize imported events: set apartment to the unit key so timeline matching is consistent
-                const normalized = imported.map(ev => ({
-                  ...ev,
-                  apartment: src.key, // use unit key (e.g., 'unit-green')
-                  color: ev.color ?? src.color,
-                  provider: provider,
-                }));
+                const normalized = imported.map(ev => {
+                  const title = (ev.title || '').toString().trim();
+                  const normalizedTitle = title.toLowerCase() === 'closed not available' ? 'booking -rezervare' : title || 'Imported Booking';
+                  return {
+                    ...ev,
+                    title: normalizedTitle,
+                    apartment: src.key, // use unit key (e.g., 'unit-green')
+                    color: ev.color ?? src.color,
+                    provider: provider,
+                  } as CalendarEvent;
+                });
 
                 setEvents(prev => {
                   const existingIds = new Set(prev.map(e => e.id));
