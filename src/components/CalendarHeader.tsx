@@ -7,6 +7,7 @@ interface CalendarHeaderProps {
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onAddEventClick: () => void;
+  onSync?: () => void;
 }
 
 export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
@@ -14,6 +15,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
   onPreviousMonth,
   onNextMonth,
   onAddEventClick
+  , onSync
 }) => {
   return (
     <div className="flex items-center justify-between mb-8">
@@ -36,6 +38,12 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
       </div>
       
       <div className="flex space-x-3">
+        <button
+          onClick={onSync}
+          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+        >
+          <span>Sync</span>
+        </button>
         <button
           onClick={onAddEventClick}
           className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"

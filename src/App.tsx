@@ -59,6 +59,52 @@ function App() {
     return found ? found.label : unitKey;
   };
 
+  // Manual sync: fetch all iCal sources, verify events, dedupe and merge
+  const handleSync = async () => {
+    const providers = ['airbnb', 'booking'];
+    const fetched: CalendarEvent[] = [];
+
+    for (const src of ICAL_SOURCES) {
+      if (!src.enabled) continue;
+      for (const provider of providers) {
+        try {
+          const imported = await parseICalFromUrl(src.key, provider);
+          if (!imported || imported.length === 0) continue;
+
+          const normalized = imported.map(ev => ({
+            ...ev,
+            apartment: src.key,
+            color: ev.color ?? src.color,
+            provider,
+            type: ev.type ?? 'imported',
+          } as CalendarEvent));
+
+          // basic verification: ensure startDate <= endDate
+          const verified = normalized.filter(e => {
+            if (!e.startDate || !e.endDate) return false;
+            return e.startDate <= e.endDate;
+          });
+
+          fetched.push(...verified);
+        } catch (err) {
+          console.warn(`Sync failed for ${src.key}/${provider}:`, err);
+        }
+      }
+    }
+
+    // Deduplicate: prefer existing events by id, otherwise add
+    setEvents(prev => {
+      const existingIds = new Set(prev.map(e => e.id));
+      const newOnes = fetched.filter(f => !existingIds.has(f.id));
+      if (newOnes.length) {
+        console.log(`Sync: added ${newOnes.length} new events`);
+        return [...prev, ...newOnes];
+      }
+      console.log('Sync: no new events found');
+      return prev;
+    });
+  };
+
   // Fetch iCal data from the backend on startup and merge into events
   useEffect(() => {
     const providers = ['airbnb', 'booking'];
@@ -156,6 +202,7 @@ function App() {
           onPreviousMonth={handlePreviousMonth}
           onNextMonth={handleNextMonth}
           onAddEventClick={() => setIsAddEventModalOpen(true)}
+          onSync={handleSync}
         />
 
         {/* Timeline view (horizontal scroll) */}
