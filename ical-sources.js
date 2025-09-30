@@ -7,10 +7,10 @@ export const ICAL_SOURCES = {
   },
   'unit-red': {
     airbnb: "https://www.airbnb.com/calendar/ical/17733314.ics?s=90ad569dc892a4ccfa5bb09fb7c2e30f",
-    booking: "https://ical.booking.com/v1/export?t=8ab9b50f-fbfd-491e-aa49-842d09a6551f"
+    booking: "https://ical.booking.com/v1/export?t=704802cb-d204-4f95-9ba7-6a8df89ee48d"
   },
   'unit-grey': {
     airbnb: "https://www.airbnb.com/calendar/ical/955475043333974952.ics?s=406ff7d12c56c12b6558712cc32b9c88",
-    booking: "https://example.com/booking/unit-grey.ics"
+    booking: "https://ical.booking.com/v1/export?t=470ab453-b32e-4904-9193-1ce81e25fba9"
   }
 };

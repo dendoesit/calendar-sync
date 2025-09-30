@@ -99,34 +99,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Manual refresh handler (wired to the header import button) - refresh all known sources
-  const handleRefreshImport = async () => {
-    const providers = ['airbnb', 'booking'];
-    for (const src of ICAL_SOURCES) {
-      if (!src.enabled) continue;
-      for (const provider of providers) {
-        try {
-          const imported = await parseICalFromUrl(src.key, provider);
-          if (imported && imported.length > 0) {
-            const normalized = imported.map(ev => ({
-              ...ev,
-              apartment: src.key,
-              color: ev.color ?? src.color,
-              provider: provider,
-            }));
-
-            setEvents(prev => {
-              const existingIds = new Set(prev.map(e => e.id));
-              const newOnes = normalized.filter(i => !existingIds.has(i.id));
-              return newOnes.length ? [...prev, ...newOnes] : prev;
-            });
-          }
-        } catch (err) {
-          console.warn(`Failed to refresh import ${src.key}/${provider}:`, err);
-        }
-      }
-    }
-  };
+  
 
   // (grid-based days are no longer used; timeline view is used instead)
 
@@ -167,11 +140,14 @@ function App() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-            Calendar Booking System
+            Calendar Airbnb + Booking
           </h1>
-          <p className="text-gray-600">
-            Manage your bookings and import calendar events
-          </p>
+          <div className="flex items-center justify-left  gap-2">
+          <span>Buna Cami !</span>
+          <p className="text-5xl">&#9995;</p>
+        </div>
+
+
         </div>
 
         {/* Calendar Header */}
@@ -188,6 +164,7 @@ function App() {
           endDate={timelineEnd}
           events={events}
           units={ICAL_SOURCES.map(s => ({ key: s.key, label: s.label, color: s.color }))}
+          scrollToDate={currentDate}
           onEventClick={(ev) => {
             setSelectedEvent(ev);
             setIsEventDetailsModalOpen(true);
@@ -196,7 +173,7 @@ function App() {
 
         {/* Upcoming events list grouped by year */}
         <div className="mt-6">
-          <h2 className="text-lg font-semibold mb-2">Upcoming Events</h2>
+          <h2 className="text-lg font-semibold mb-2"> Rezervari</h2>
           <div className="space-y-4">
             {(() => {
               const upcoming = events.filter(e => e.endDate >= timelineStart).sort((a,b) => +a.startDate - +b.startDate);
