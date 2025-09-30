@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { format } from 'date-fns';
+import { ro } from 'date-fns/locale';
 
 interface CalendarHeaderProps {
   currentDate: Date;
@@ -27,7 +28,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           <ChevronLeft className="w-5 h-5 text-gray-600" />
         </button>
         <h1 className="text-2xl font-bold text-gray-900">
-          {format(currentDate, 'MMMM yyyy')}
+          {format(currentDate, 'MMMM yyyy', { locale: ro })}
         </h1>
         <button
           onClick={onNextMonth}

@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { eachDayOfInterval, differenceInCalendarDays, format, startOfDay, endOfDay } from 'date-fns';
+import { ro } from 'date-fns/locale';
 import { CalendarEvent } from '../types/calendar';
 
 interface TimelineCalendarProps {
@@ -18,7 +19,7 @@ export const TimelineCalendar: React.FC<TimelineCalendarProps> = ({
   endDate,
   events,
   units,
-  dayWidth = 120,
+  dayWidth = 160,
   leftLabelWidth = 200,
   scrollToDate = null,
   onEventClick,
@@ -152,12 +153,15 @@ export const TimelineCalendar: React.FC<TimelineCalendarProps> = ({
         </div>
         <div className="overflow-x-auto w-full" ref={headerScrollRef} onScroll={onHeaderScroll}>
           <div style={{ width: totalWidth }} className="flex">
-            {days.map((d) => (
-              <div key={d.toISOString()} style={{ width: dayWidth }} className="p-2 text-center text-xs text-gray-600 border-r">
-                <div>{format(d, 'dd')}</div>
-                <div className="text-[10px] text-gray-400">{format(d, 'MMM')}</div>
-              </div>
-            ))}
+            {days.map((d) => {
+              const isWeekend = d.getDay() === 0 || d.getDay() === 6; // Sunday=0, Saturday=6
+              return (
+                <div key={d.toISOString()} style={{ width: dayWidth }} className={`p-3 text-center text-gray-600 border-r ${isWeekend ? 'bg-purple-100' : ''}`}>
+                  <div className="text-xl font-semibold text-gray-800">{format(d, 'EEEE', { locale: ro })}</div>
+                  <div className="text-2xl font-bold">{format(d, 'dd', { locale: ro })}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -184,9 +188,12 @@ export const TimelineCalendar: React.FC<TimelineCalendarProps> = ({
                   {/* vertical day separators (optional) */}
                   <div className="absolute inset-0">
                     <div style={{ display: 'flex', height: '100%' }}>
-                      {days.map((d) => (
-                        <div key={d.toISOString()} style={{ width: dayWidth }} className="border-r h-full"></div>
-                      ))}
+                      {days.map((d) => {
+                        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                        return (
+                          <div key={d.toISOString()} style={{ width: dayWidth }} className={`h-full border-r ${isWeekend ? 'bg-purple-50' : ''}`}></div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -210,12 +217,12 @@ export const TimelineCalendar: React.FC<TimelineCalendarProps> = ({
                         onClick={(e) => onEventClick?.(ev, e)}
                         className="absolute rounded-md shadow-sm text-sm text-white px-2 py-1 cursor-pointer flex items-center justify-between"
                         style={{ left, width, top, backgroundColor: ev.color || '#4F46E5' }}
-                        title={`${ev.title} — ${format(ev.startDate, 'MMM d')} to ${format(ev.endDate, 'MMM d')}`}>
+                            title={`${ev.title} — ${format(ev.startDate, 'MMM d', { locale: ro })} to ${format(ev.endDate, 'MMM d', { locale: ro })}`}>
                         <div className="truncate font-medium mr-2">{ev.title}</div>
                         <div className="text-xs opacity-90 whitespace-nowrap ml-2">
-                          <span className="px-1">{format(ev.startDate, 'MMM d')}</span>
+                              <span className="px-1">{format(ev.startDate, 'MMM d', { locale: ro })}</span>
                           <span className="px-1">—</span>
-                          <span className="px-1">{format(ev.endDate, 'MMM d')}</span>
+                              <span className="px-1">{format(ev.endDate, 'MMM d', { locale: ro })}</span>
                         </div>
                       </div>
                     );

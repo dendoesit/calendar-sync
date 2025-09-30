@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { addMonths, subMonths, format, startOfDay } from 'date-fns';
+import { ro } from 'date-fns/locale';
 import { CalendarHeader } from './components/CalendarHeader';
 import TimelineCalendar from './components/TimelineCalendar';
 import { AddEventModal } from './components/AddEventModal';
@@ -28,8 +29,15 @@ function App() {
           const startDate = startRaw ? new Date(String(startRaw)) : new Date();
           const endDate = endRaw ? new Date(String(endRaw)) : new Date();
           const base = event as Record<string, unknown>;
+          // migrate title variants to canonical 'booking reservations'
+          const rawTitle = (base['title'] || '') as unknown;
+          const titleStr = String(rawTitle || '').trim();
+          const titleKey = titleStr.toLowerCase().replace(/[\s-]/g, '');
+          const normalizedTitle = titleKey === 'closednotavailable' ? 'booking reservations' : titleStr;
+
           return {
             ...(base as Record<string, unknown>),
+            title: normalizedTitle,
             startDate,
             endDate,
           } as CalendarEvent;
@@ -73,7 +81,7 @@ function App() {
 
           const normalized = imported.map(ev => {
             const title = (ev.title || '').toString().trim();
-            const normalizedTitle = title.toLowerCase() === 'closed not available' ? 'booking -rezervare' : title || 'Imported Booking';
+            const normalizedTitle = title.toLowerCase() === 'closed not available' ? 'booking reservations' : title || 'Imported Booking';
             return ({
               ...ev,
               title: normalizedTitle,
@@ -125,7 +133,7 @@ function App() {
                 // Normalize imported events: set apartment to the unit key so timeline matching is consistent
                 const normalized = imported.map(ev => {
                   const title = (ev.title || '').toString().trim();
-                  const normalizedTitle = title.toLowerCase() === 'closed not available' ? 'booking -rezervare' : title || 'Imported Booking';
+                  const normalizedTitle = title.toLowerCase() === 'closed not available' ? 'booking reservations' : title || 'Imported Booking';
                   return {
                     ...ev,
                     title: normalizedTitle,
@@ -199,7 +207,7 @@ function App() {
             Calendar Airbnb + Booking
           </h1>
           <div className="flex items-center justify-left  gap-2">
-          <span>Buna Cami !</span>
+          <h3 className='text-2xl'>Buna Cami !</h3>
           <p className="text-5xl">&#9995;</p>
         </div>
 
@@ -255,7 +263,7 @@ function App() {
                             <div>
                               <div className="text-sm font-medium">{e.title}</div>
                               <div className="text-xs text-gray-500">
-                                {getLabelForUnit(String(e.apartment))} • {format(e.startDate, 'MMM d, yyyy, HH:mm')} — {format(e.endDate, 'MMM d, yyyy, HH:mm')}
+                                {getLabelForUnit(String(e.apartment))} • {format(e.startDate, 'MMM d, yyyy, HH:mm', { locale: ro })} — {format(e.endDate, 'MMM d, yyyy, HH:mm', { locale: ro })}
                               </div>
                             </div>
                             <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
@@ -276,7 +284,7 @@ function App() {
                             <div>
                               <div className="text-sm font-medium">{e.title}</div>
                               <div className="text-xs text-gray-500">
-                                {e.apartment ?? 'Unit'} • {format(e.startDate, 'MMM d, yyyy, HH:mm')} — {format(e.endDate, 'MMM d, yyyy, HH:mm')}
+                                {e.apartment ?? 'Unit'} • {format(e.startDate, 'MMM d, yyyy, HH:mm', { locale: ro })} — {format(e.endDate, 'MMM d, yyyy, HH:mm', { locale: ro })}
                               </div>
                             </div>
                             <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
@@ -297,7 +305,7 @@ function App() {
                             <div>
                               <div className="text-sm font-medium">{e.title}</div>
                               <div className="text-xs text-gray-500">
-                                {e.apartment ?? 'Unit'} • {format(e.startDate, 'MMM d, yyyy, HH:mm')} — {format(e.endDate, 'MMM d, yyyy, HH:mm')}
+                                {e.apartment ?? 'Unit'} • {format(e.startDate, 'MMM d, yyyy, HH:mm', { locale: ro })} — {format(e.endDate, 'MMM d, yyyy, HH:mm', { locale: ro })}
                               </div>
                             </div>
                             <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
