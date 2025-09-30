@@ -95,6 +95,8 @@ const parseICalData = (icalData: string, source = ''): CalendarEvent[] => {
       color: defaultColor,
       type: 'imported' as const,
       apartment,
+      // provider will be set by caller when parsing per-unit/provider
+      provider: source || undefined,
     };
   });
   

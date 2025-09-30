@@ -65,11 +65,12 @@ function App() {
             try {
               const imported = await parseICalFromUrl(src.key, provider);
               if (imported && imported.length > 0) {
-                // Ensure imported events have apartment and color set to this unit
+                // Ensure imported events have apartment, color, and provider set to this unit/provider
                 const normalized = imported.map(ev => ({
                   ...ev,
                   apartment: ev.apartment ?? src.label,
                   color: ev.color ?? src.color,
+                  provider: provider,
                 }));
 
                 setEvents(prev => {
@@ -105,6 +106,7 @@ function App() {
               ...ev,
               apartment: ev.apartment ?? src.label,
               color: ev.color ?? src.color,
+              provider: provider,
             }));
 
             setEvents(prev => {

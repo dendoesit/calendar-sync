@@ -7,6 +7,7 @@ export interface CalendarEvent {
   color: string;
   type: 'imported' | 'manual';
   apartment?: string;
+  provider?: string;
 }
 
 export interface Day {

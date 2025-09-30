@@ -1,20 +1,7 @@
 import fetch from "node-fetch";
 
 // Configuration: per-unit, per-provider iCal URLs
-const ICAL_SOURCES = {
-  'unit-green': {
-    airbnb: "https://www.airbnb.com/calendar/ical/18836033.ics?s=d716e5374d61fee09c58b73dbed25609",
-    booking: "https://ical.booking.com/v1/export?t=8ab9b50f-fbfd-491e-aa49-842d09a6551f"
-  },
-  'unit-red': {
-    airbnb: "https://example.com/airbnb/unit-red.ics",
-    booking: "https://ical.booking.com/v1/export?t=8ab9b50f-fbfd-491e-aa49-842d09a6551f"
-  },
-  'unit-grey': {
-    airbnb: "https://example.com/airbnb/unit-grey.ics",
-    booking: "https://example.com/booking/unit-grey.ics"
-  }
-};
+import { ICAL_SOURCES } from '../../ical-sources.js';
 
 const fetchIcal = async (url) => {
   const response = await fetch(url, {
@@ -36,42 +23,39 @@ const fetchIcal = async (url) => {
 // Netlify serverless handler
 export async function handler(event) {
   try {
-    const path = event.path.replace("/.netlify/functions/fetch-ical", "");
-    const segments = path.split("/").filter(Boolean);
+    // Determine path segments. Accept multiple shapes and normalize to [unit, provider]
+    // Examples handled:
+    //  - /.netlify/functions/fetch-ical/<unit>/<provider>
+    //  - /api/ical/<unit>/<provider>
+    //  - /<unit>/<provider>
+    let path = event.path || '';
+    // strip known function prefix
+    if (path.startsWith('/.netlify/functions/fetch-ical')) {
+      path = path.replace('/.netlify/functions/fetch-ical', '');
+    }
+    // strip api/ical prefix if present
+    if (path.startsWith('/api/ical')) {
+      path = path.replace('/api/ical', '');
+    }
+
+    const segments = path.split('/').filter(Boolean);
+    console.log('fetch-ical called with path=', event.path, 'normalized segments=', segments);
 
     let url;
 
     if (segments.length === 0) {
       // Default: unit-green Airbnb
-      url = ICAL_SOURCES["unit-green"]?.airbnb;
-      if (!url) {
-        return {
-          statusCode: 404,
-          body: JSON.stringify({ error: "Default iCal not configured" }),
-        };
-      }
-    } else if (segments.length === 2) {
-      const [unit, provider] = segments;
+      url = ICAL_SOURCES['unit-green']?.airbnb;
+      if (!url) return { statusCode: 404, body: JSON.stringify({ error: 'Default iCal not configured' }) };
+    } else if (segments.length >= 2) {
+      const unit = segments[0];
+      const provider = segments[1];
       const unitCfg = ICAL_SOURCES[unit];
-
-      if (!unitCfg) {
-        return {
-          statusCode: 404,
-          body: JSON.stringify({ error: `Unknown unit: ${unit}` }),
-        };
-      }
+      if (!unitCfg) return { statusCode: 404, body: JSON.stringify({ error: `Unknown unit: ${unit}` }) };
       url = unitCfg[provider];
-      if (!url) {
-        return {
-          statusCode: 404,
-          body: JSON.stringify({ error: `Unknown provider for unit: ${provider}` }),
-        };
-      }
+      if (!url) return { statusCode: 404, body: JSON.stringify({ error: `Unknown provider for unit: ${provider}` }) };
     } else {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Invalid request format" }),
-      };
+      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid request format' }) };
     }
 
     const text = await fetchIcal(url);
