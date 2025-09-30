@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { addMonths, subMonths } from 'date-fns';
+import { addMonths, subMonths, format, startOfDay } from 'date-fns';
 import { CalendarHeader } from './components/CalendarHeader';
 import TimelineCalendar from './components/TimelineCalendar';
 import { AddEventModal } from './components/AddEventModal';
@@ -46,24 +46,41 @@ function App() {
     localStorage.setItem('calendar-events', JSON.stringify(events));
   }, [events]);
 
+  // Define the iCal sources (keys correspond to server routes /api/ical/:source)
+  const ICAL_SOURCES = [
+    { key: 'unit-green', label: 'Unit Green', color: '#10B981', enabled: true },
+    { key: 'unit-red', label: 'Unit Red', color: '#EF4444', enabled: true },
+    { key: 'unit-grey', label: 'Unit Grey', color: '#9CA3AF', enabled: true },
+  ];
+
   // Fetch iCal data from the backend on startup and merge into events
   useEffect(() => {
-    const sources = ['airbnb', 'booking'];
+    const providers = ['airbnb', 'booking'];
 
     const loadRemoteICal = async () => {
       try {
-        for (const src of sources) {
-          try {
-            const imported = await parseICalFromUrl(src);
-            if (imported && imported.length > 0) {
-              setEvents(prev => {
-                const existingIds = new Set(prev.map(e => e.id));
-                const newOnes = imported.filter(i => !existingIds.has(i.id));
-                return newOnes.length ? [...prev, ...newOnes] : prev;
-              });
+        for (const src of ICAL_SOURCES) {
+          if (!src.enabled) continue;
+          for (const provider of providers) {
+            try {
+              const imported = await parseICalFromUrl(src.key, provider);
+              if (imported && imported.length > 0) {
+                // Ensure imported events have apartment and color set to this unit
+                const normalized = imported.map(ev => ({
+                  ...ev,
+                  apartment: ev.apartment ?? src.label,
+                  color: ev.color ?? src.color,
+                }));
+
+                setEvents(prev => {
+                  const existingIds = new Set(prev.map(e => e.id));
+                  const newOnes = normalized.filter(i => !existingIds.has(i.id));
+                  return newOnes.length ? [...prev, ...newOnes] : prev;
+                });
+              }
+            } catch (err) {
+              console.warn(`Failed to import ${src.key}/${provider}:`, err);
             }
-          } catch (err) {
-            console.warn(`Failed to import ${src}:`, err);
           }
         }
       } catch (error) {
@@ -72,32 +89,41 @@ function App() {
     };
 
     loadRemoteICal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Manual refresh handler (wired to the header import button) - refresh all known sources
   const handleRefreshImport = async () => {
-    const sources = ['airbnb', 'booking'];
-    for (const src of sources) {
-      try {
-        const imported = await parseICalFromUrl(src);
-        if (imported && imported.length > 0) {
-          setEvents(prev => {
-            const existingIds = new Set(prev.map(e => e.id));
-            const newOnes = imported.filter(i => !existingIds.has(i.id));
-            return newOnes.length ? [...prev, ...newOnes] : prev;
-          });
+    const providers = ['airbnb', 'booking'];
+    for (const src of ICAL_SOURCES) {
+      if (!src.enabled) continue;
+      for (const provider of providers) {
+        try {
+          const imported = await parseICalFromUrl(src.key, provider);
+          if (imported && imported.length > 0) {
+            const normalized = imported.map(ev => ({
+              ...ev,
+              apartment: ev.apartment ?? src.label,
+              color: ev.color ?? src.color,
+            }));
+
+            setEvents(prev => {
+              const existingIds = new Set(prev.map(e => e.id));
+              const newOnes = normalized.filter(i => !existingIds.has(i.id));
+              return newOnes.length ? [...prev, ...newOnes] : prev;
+            });
+          }
+        } catch (err) {
+          console.warn(`Failed to refresh import ${src.key}/${provider}:`, err);
         }
-      } catch (err) {
-        console.warn(`Failed to refresh import ${src}:`, err);
       }
     }
   };
 
   // (grid-based days are no longer used; timeline view is used instead)
 
-  // Timeline window: start 14 days before current, end 60 days after
-  const timelineStart = new Date(currentDate);
-  timelineStart.setDate(timelineStart.getDate() - 14);
+  // Timeline window: start from today, end 60 days after
+  const timelineStart = startOfDay(new Date());
   const timelineEnd = new Date(currentDate);
   timelineEnd.setDate(timelineEnd.getDate() + 60);
 
@@ -154,11 +180,38 @@ function App() {
           startDate={timelineStart}
           endDate={timelineEnd}
           events={events}
+          units={ICAL_SOURCES.map(s => ({ key: s.key, label: s.label, color: s.color }))}
           onEventClick={(ev) => {
             setSelectedEvent(ev);
             setIsEventDetailsModalOpen(true);
           }}
         />
+
+        {/* Upcoming events list */}
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold mb-2">Upcoming Events</h2>
+          <div className="space-y-2">
+            {events
+              .filter(e => e.endDate >= timelineStart)
+              .sort((a,b) => +a.startDate - +b.startDate)
+              .map(e => (
+                <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium">{e.title}</div>
+                    <div className="text-xs text-gray-500">
+                      {e.apartment ?? 'Unit 1'} • {format(e.startDate, 'MMM d, HH:mm')} — {format(e.endDate, 'MMM d, HH:mm')}
+                    </div>
+                  </div>
+                  <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>{/* color swatch */}
+                    <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
+                  </div>
+                </div>
+            ))}
+            {events.filter(e => e.endDate >= timelineStart).length === 0 && (
+              <div className="text-sm text-gray-500">No upcoming events</div>
+            )}
+          </div>
+        </div>
 
         {/* Stats */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -3,11 +3,16 @@ import { CalendarEvent } from '../types/calendar';
 
 // const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
-export const parseICalFromUrl = async (source = ''): Promise<CalendarEvent[]> => {
+// now accepts unit and provider to hit /api/ical/:unit/:provider
+export const parseICalFromUrl = async (unit = '', provider = 'airbnb'): Promise<CalendarEvent[]> => {
   try {
-    // Fetch iCal from our backend (bypasses CORS). If source is provided, hit /api/ical/:source
-    const endpoint = source ? `http://localhost:4000/api/ical/${encodeURIComponent(source)}` : `http://localhost:4000/api/ical`;
+    // Fetch iCal from our backend (bypasses CORS). Use per-unit per-provider endpoint
+    const endpoint = unit
+    ? `/api/ical/${encodeURIComponent(unit)}/${encodeURIComponent(provider)}`
+    : `/api/ical`;
+
     const response = await fetch(endpoint);
+
 
     if (!response.ok) {
       // Try to get error message if JSON, otherwise fallback
@@ -23,11 +28,9 @@ export const parseICalFromUrl = async (source = ''): Promise<CalendarEvent[]> =>
 
     // The response is plain text (iCal), not JSON
     const text = await response.text();
-    console.log("iCal data:", text);
 
-  // Call the parser to convert text to CalendarEvent[]
-    const parsedData = parseICalData(text);
-    console.log("Parsed bookings:", parsedData);
+  // Call the parser to convert text to CalendarEvent[] and tag with apartment/color (unit as source)
+  const parsedData = parseICalData(text, unit);
 
     return parsedData;
 
@@ -58,7 +61,7 @@ export const parseICalFile = async (file: File): Promise<CalendarEvent[]> => {
   });
 };
 
-const parseICalData = (icalData: string): CalendarEvent[] => {
+const parseICalData = (icalData: string, source = ''): CalendarEvent[] => {
   const jcalData = ICAL.parse(icalData);
   const comp = new ICAL.Component(jcalData);
   const vevents = comp.getAllSubcomponents('vevent');
@@ -66,6 +69,22 @@ const parseICalData = (icalData: string): CalendarEvent[] => {
   const events: CalendarEvent[] = vevents.map((vevent, index) => {
     const event = new ICAL.Event(vevent);
     const uid = (event.uid && String(event.uid)) || '';
+    // Determine apartment friendly name and default color by source
+    const sourceLower = String(source || '').toLowerCase();
+    let apartment = source ? source : 'Unit 1';
+    let defaultColor = '#10B981'; // default green
+
+    if (sourceLower.includes('red')) {
+      apartment = 'Unit Red';
+      defaultColor = '#EF4444';
+    } else if (sourceLower.includes('grey') || sourceLower.includes('gray')) {
+      apartment = 'Unit Grey';
+      defaultColor = '#9CA3AF';
+    } else if (sourceLower.includes('green')) {
+      apartment = 'Unit Green';
+      defaultColor = '#10B981';
+    }
+
     return {
       // Prefer the UID from the iCal if available to make imports idempotent.
       id: uid || `imported-${event.startDate.toJSDate().toISOString()}-${event.endDate.toJSDate().toISOString()}-${index}`,
@@ -73,8 +92,9 @@ const parseICalData = (icalData: string): CalendarEvent[] => {
       description: event.description || '',
       startDate: event.startDate.toJSDate(),
       endDate: event.endDate.toJSDate(),
-      color: '#8B5CF6',
-      type: 'imported' as const
+      color: defaultColor,
+      type: 'imported' as const,
+      apartment,
     };
   });
   
