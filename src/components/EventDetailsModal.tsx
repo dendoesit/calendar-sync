@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, FileText, Trash2 } from 'lucide-react';
 import { CalendarEvent } from '../types/calendar';
 import { format } from 'date-fns';
+import notesStore from '../utils/notesStore';
 
 interface EventDetailsModalProps {
   isOpen: boolean;
@@ -16,6 +17,27 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
   event,
   onDelete
 }) => {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteText, setNoteText] = useState('');
+
+  useEffect(() => {
+    if (!event) {
+      setNoteText('');
+      return;
+    }
+    const entry = notesStore.getNoteForEvent(event);
+    setNoteText(entry ? entry.content : '');
+  }, [event]);
+
+  // auto-open notes editor when modal opens
+  useEffect(() => {
+    if (isOpen && event) {
+      setNotesOpen(true);
+    } else {
+      setNotesOpen(false);
+    }
+  }, [isOpen, event]);
+
   if (!isOpen || !event) return null;
 
   const handleDelete = () => {
@@ -80,6 +102,52 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Notes toggler + editor */}
+          <div>
+            <button
+              onClick={() => setNotesOpen(o => !o)}
+              className="inline-flex items-center space-x-2 px-3 py-1 border rounded text-sm bg-gray-100 hover:bg-gray-200"
+            >
+              <FileText className="w-4 h-4 text-gray-600" />
+              <span>{notesOpen ? 'Hide Notes' : 'Notes'}</span>
+            </button>
+
+            {notesOpen && (
+              <div className="mt-3">
+                <textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  rows={5}
+                  className="w-full p-2 border rounded text-sm"
+                  placeholder="Add a short note; saved locally for a few days"
+                />
+
+                <div className="flex items-center justify-end space-x-2 mt-2">
+                  <button
+                    onClick={() => {
+                      notesStore.deleteNoteForEvent(event);
+                      setNoteText('');
+                    }}
+                    className="px-3 py-1 border rounded text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Delete Note
+                  </button>
+                  <button
+                    onClick={() => {
+                      notesStore.saveNoteForEvent(event, noteText || '', 3);
+                      // close the modal after saving (per user request)
+                      setNotesOpen(false);
+                      onClose();
+                    }}
+                    className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                  >
+                    Save Note (3 days)
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Actions */}

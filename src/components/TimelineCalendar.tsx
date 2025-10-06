@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { eachDayOfInterval, differenceInCalendarDays, format, startOfDay, endOfDay } from 'date-fns';
 import { ro } from 'date-fns/locale';
 import { CalendarEvent } from '../types/calendar';
+import notesStore from '../utils/notesStore';
 
 interface TimelineCalendarProps {
   startDate: Date;
@@ -211,18 +212,36 @@ export const TimelineCalendar: React.FC<TimelineCalendarProps> = ({
                     // position events within uniform rows using lane index
                     const top = 8 + lane * laneHeight;
 
+                    const noteEntry = notesStore.getNoteForEvent(ev);
+                    const hasNote = !!noteEntry;
+
+                    // prepare a short single-line preview of the note (first line, truncated)
+                    const notePreview = hasNote && noteEntry && noteEntry.content
+                      ? String(noteEntry.content).split('\n')[0].trim()
+                      : '';
+                    const previewShort = notePreview.length > 40 ? notePreview.slice(0, 37) + '…' : notePreview;
+
                     return (
                       <div
                         key={ev.id}
                         onClick={(e) => onEventClick?.(ev, e)}
                         className="absolute rounded-md shadow-sm text-sm text-white px-2 py-1 cursor-pointer flex items-center justify-between"
                         style={{ left, width, top, backgroundColor: ev.color || '#4F46E5' }}
-                            title={`${ev.title} — ${format(ev.startDate, 'MMM d', { locale: ro })} to ${format(ev.endDate, 'MMM d', { locale: ro })}`}>
-                        <div className="truncate font-medium mr-2">{ev.title}</div>
+                        title={`${ev.title} — ${format(ev.startDate, 'MMM d', { locale: ro })} to ${format(ev.endDate, 'MMM d', { locale: ro })}`}>
+                        <div className="flex items-center mr-2 min-w-0">
+                          {hasNote && <span title="Note" className="inline-block w-2 h-2 rounded-full bg-yellow-300 mr-2 shrink-0" />}
+                          <div className="min-w-0">
+                            <div className="truncate font-medium leading-tight">{ev.title}</div>
+                            {hasNote && (
+                              <div className="text-[10px] text-yellow-50 bg-yellow-700/40 px-1 rounded mt-0.5 truncate max-w-[10rem]">{previewShort}</div>
+                            )}
+                          </div>
+                        </div>
+
                         <div className="text-xs opacity-90 whitespace-nowrap ml-2">
-                              <span className="px-1">{format(ev.startDate, 'MMM d', { locale: ro })}</span>
+                          <span className="px-1">{format(ev.startDate, 'MMM d', { locale: ro })}</span>
                           <span className="px-1">—</span>
-                              <span className="px-1">{format(ev.endDate, 'MMM d', { locale: ro })}</span>
+                          <span className="px-1">{format(ev.endDate, 'MMM d', { locale: ro })}</span>
                         </div>
                       </div>
                     );

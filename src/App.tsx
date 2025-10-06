@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { addMonths, subMonths, format, startOfDay } from 'date-fns';
+import { addMonths, subMonths, format, startOfDay, subDays } from 'date-fns';
 import { ro } from 'date-fns/locale';
 import { CalendarHeader } from './components/CalendarHeader';
 import TimelineCalendar from './components/TimelineCalendar';
 import { AddEventModal } from './components/AddEventModal';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { CalendarEvent } from './types/calendar';
-import {  parseICalFromUrl } from './utils/icalParser';
+import {  parseICalFromUrl, dedupeIncoming, eventSignature, mergeOverlappingByTitleAndApartment, isSubsumedByExisting } from './utils/icalParser';
 
 
 function App() {
@@ -42,7 +42,20 @@ function App() {
             endDate,
           } as CalendarEvent;
         });
-        setEvents(parsedEvents);
+        // Deduplicate saved events by signature in case duplicates were stored previously.
+        const seen: Record<string, boolean> = {};
+        const deduped = parsedEvents.filter(ev => {
+          const sig = eventSignature(ev as CalendarEvent);
+          if (seen[sig]) return false;
+          seen[sig] = true;
+          return true;
+        });
+        if (deduped.length !== parsedEvents.length) {
+          console.log(`Startup dedupe: removed ${parsedEvents.length - deduped.length} duplicate events from saved store`);
+        }
+        // Merge overlapping CLOSED/not-available blocks after dedupe so long contiguous closed ranges are a single event
+        const merged = mergeOverlappingByTitleAndApartment(deduped);
+        setEvents(merged);
       } catch (error) {
         console.error('Failed to load saved events:', error);
       }
@@ -98,20 +111,24 @@ function App() {
             return e.startDate <= e.endDate;
           });
 
-          fetched.push(...verified);
+          // Filter out incoming events that are fully subsumed by existing ones (avoid big overlapping imports)
+          const filtered = verified.filter(iv => !isSubsumedByExisting(iv, events));
+          fetched.push(...filtered);
         } catch (err) {
           console.warn(`Sync failed for ${src.key}/${provider}:`, err);
         }
       }
     }
 
-    // Deduplicate: prefer existing events by id, otherwise add
+    // Deduplicate incoming against existing events using signature (uid or composite)
     setEvents(prev => {
-      const existingIds = new Set(prev.map(e => e.id));
-      const newOnes = fetched.filter(f => !existingIds.has(f.id));
+      const newOnes = dedupeIncoming(prev, fetched);
       if (newOnes.length) {
-        console.log(`Sync: added ${newOnes.length} new events`);
-        return [...prev, ...newOnes];
+        // Merge overlapping CLOSED/Not available events among existing + new ones to avoid duplicates/overlaps
+        const combined = [...prev, ...newOnes];
+        const merged = mergeOverlappingByTitleAndApartment(combined);
+        console.log(`Sync: added ${newOnes.length} new events (post-merge count ${merged.length})`);
+        return merged;
       }
       console.log('Sync: no new events found');
       return prev;
@@ -144,8 +161,11 @@ function App() {
                 });
 
                 setEvents(prev => {
-                  const existingIds = new Set(prev.map(e => e.id));
-                  const newOnes = normalized.filter(i => !existingIds.has(i.id));
+                  // Filter normalized events that are fully subsumed by existing events (avoid adding a broad import
+                  // that is already covered by smaller existing reservations)
+                  const filtered = normalized.filter(nv => !isSubsumedByExisting(nv, prev));
+                  // Use signature-based deduplication (uid or composite) so we don't add duplicates when imported events lack stable IDs.
+                  const newOnes = dedupeIncoming(prev, filtered);
                   return newOnes.length ? [...prev, ...newOnes] : prev;
                 });
               }
@@ -167,8 +187,9 @@ function App() {
 
   // (grid-based days are no longer used; timeline view is used instead)
 
-  // Timeline window: start from today, end 60 days after
-  const timelineStart = startOfDay(new Date());
+  // Timeline window: start a few days in the past so user can scroll left slightly and see recent past reservations
+  const PAST_DAYS_TO_SHOW = 3; // number of days to allow scrolling into the past
+  const timelineStart = startOfDay(subDays(new Date(), PAST_DAYS_TO_SHOW));
   const timelineEnd = new Date(currentDate);
   timelineEnd.setDate(timelineEnd.getDate() + 60);
 
@@ -237,86 +258,59 @@ function App() {
           }}
         />
 
-        {/* Upcoming events list grouped by year */}
+        {/* Upcoming events list grouped by apartment and sorted by date (primary sort = date) */}
         <div className="mt-6">
-          <h2 className="text-lg font-semibold mb-2"> Rezervari</h2>
+          <h2 className="text-lg font-semibold mb-2">Rezervari</h2>
           <div className="space-y-4">
             {(() => {
-              const upcoming = events.filter(e => e.endDate >= timelineStart).sort((a,b) => +a.startDate - +b.startDate);
+              const upcoming = events.filter(e => e.endDate >= timelineStart).sort((a, b) => +a.startDate - +b.startDate);
               if (upcoming.length === 0) return <div className="text-sm text-gray-500">No upcoming events</div>;
 
-              const now = new Date();
-              const thisYear = now.getFullYear();
-              const nextYear = thisYear + 1;
+              // Order apartments by ICAL_SOURCES (the three apartments defined above)
+              const aptOrder = ICAL_SOURCES.map(s => s.key);
 
-              const thisYearEvents = upcoming.filter(e => e.startDate.getFullYear() === thisYear);
-              const nextYearEvents = upcoming.filter(e => e.startDate.getFullYear() === nextYear);
-              const laterEvents = upcoming.filter(e => e.startDate.getFullYear() > nextYear);
+              // Map events to apartments (use 'other' for unknown)
+              const aptMap: Record<string, CalendarEvent[]> = {};
+              upcoming.forEach(ev => {
+                const aptKey = (ev.apartment as string) || 'other';
+                if (!aptMap[aptKey]) aptMap[aptKey] = [];
+                aptMap[aptKey].push(ev);
+              });
+
+              // Helper to render a single apartment section
+              const renderApartment = (key: string, label?: string) => {
+                const list = (aptMap[key] || []).sort((a, b) => +a.startDate - +b.startDate);
+                if (list.length === 0) return null;
+                return (
+                  <div key={key}>
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">{label || getLabelForUnit(key)}</h3>
+                    <div className="space-y-2">
+                      {list.map(e => (
+                        <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-medium">{`• ${format(e.startDate, 'MMM d', { locale: ro })} — ${format(e.endDate, 'MMM d', { locale: ro })}`}</div>
+                            <div className="text-xs text-gray-500"> {e.title}
+                            </div>
+                          </div>
+                          <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
+                            <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              };
 
               return (
                 <div className="space-y-3">
-                  {thisYearEvents.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-700 mb-2">This year</h3>
-                      <div className="space-y-2">
-                        {thisYearEvents.map(e => (
-                          <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
-                            <div>
-                              <div className="text-sm font-medium">{e.title}</div>
-                              <div className="text-xs text-gray-500">
-                                {getLabelForUnit(String(e.apartment))} • {format(e.startDate, 'MMM d, yyyy, HH:mm', { locale: ro })} — {format(e.endDate, 'MMM d, yyyy, HH:mm', { locale: ro })}
-                              </div>
-                            </div>
-                            <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
-                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {/* Render the three known apartments in order */}
+                  {aptOrder.map(k => renderApartment(k, getLabelForUnit(k)))}
 
-                  {nextYearEvents.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-700 mb-2">Next year</h3>
-                      <div className="space-y-2">
-                        {nextYearEvents.map(e => (
-                          <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
-                            <div>
-                              <div className="text-sm font-medium">{e.title}</div>
-                              <div className="text-xs text-gray-500">
-                                {e.apartment ?? 'Unit'} • {format(e.startDate, 'MMM d, yyyy, HH:mm', { locale: ro })} — {format(e.endDate, 'MMM d, yyyy, HH:mm', { locale: ro })}
-                              </div>
-                            </div>
-                            <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
-                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {laterEvents.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-700 mb-2">Future ({nextYear + 1} and beyond)</h3>
-                      <div className="space-y-2">
-                        {laterEvents.map(e => (
-                          <div key={e.id} className="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between">
-                            <div>
-                              <div className="text-sm font-medium">{e.title}</div>
-                              <div className="text-xs text-gray-500">
-                                {e.apartment ?? 'Unit'} • {format(e.startDate, 'MMM d, yyyy, HH:mm', { locale: ro })} — {format(e.endDate, 'MMM d, yyyy, HH:mm', { locale: ro })}
-                              </div>
-                            </div>
-                            <div className="text-sm font-medium text-gray-700" style={{ color: e.color }}>
-                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {/* Render any other apartments/events that didn't match the known keys */}
+                  {Object.keys(aptMap)
+                    .filter(k => !aptOrder.includes(k))
+                    .map(k => renderApartment(k, k === 'other' ? 'Other / Unassigned' : k))}
                 </div>
               );
             })()}

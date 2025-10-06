@@ -1,6 +1,7 @@
 import React from 'react';
 import { Lock } from 'lucide-react';
 import { Day } from '../types/calendar';
+import { format } from 'date-fns';
 
 interface CalendarGridProps {
   days: Day[];
@@ -61,9 +62,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({ days, onDayClick }) 
                     e.stopPropagation();
                     // Could trigger event details here
                   }}
+                  title={`${format(event.startDate, 'MMM d, yyyy, HH:mm')} — ${format(event.endDate, 'MMM d, yyyy, HH:mm')}`}
                 >
                   <div className="flex items-center justify-between space-x-2">
-                    <span className="truncate">{event.title}</span>
+                    <span className="truncate">
+                      {`${format(event.startDate, 'MMM d, HH:mm')} — ${format(event.endDate, 'MMM d, HH:mm')}`}
+                    </span>
                     {/* show a small blocked/lock icon if the event spans multiple days */}
                     {event.endDate > event.startDate && (
                       <Lock className="w-3 h-3 text-gray-500 ml-2" />
