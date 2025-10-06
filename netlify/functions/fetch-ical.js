@@ -2,15 +2,20 @@
 // to avoid pulling in fetch-blob/formdata-polyfill which can cause runtime errors in Netlify.
 import { ICAL_SOURCES } from '../../ical-sources.js';
 
-const fetchIcal = async (url) => {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
-      "Accept": "text/calendar, text/plain, */*",
-    },
-  });
+const fetchIcal = async (url, forwardedHeaders = {}) => {
+  // Build headers for the outgoing fetch. Prefer headers forwarded from the
+  // original request (user-agent, accept, referer/origin) so remote providers
+  // can respond consistently with what a browser would receive.
+  const headers = {
+    'User-Agent': forwardedHeaders['user-agent'] || forwardedHeaders['User-Agent'] || 
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
+    'Accept': forwardedHeaders['accept'] || forwardedHeaders['Accept'] || 'text/calendar, text/plain, */*',
+  };
+  // Optional referer/origin forwarding can be useful for some providers
+  if (forwardedHeaders['referer']) headers['Referer'] = forwardedHeaders['referer'];
+  if (forwardedHeaders['origin']) headers['Origin'] = forwardedHeaders['origin'];
+
+  const response = await fetch(url, { headers });
 
   if (!response.ok) {
     throw new Error(`HTTP error! Status: ${response.status}`);
@@ -57,7 +62,11 @@ export async function handler(event) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Invalid request format' }) };
     }
 
-    const text = await fetchIcal(url);
+    const text = await fetchIcal(url, event.headers || {});
+    // log small diagnostics so you can compare Netlify vs local fetches in logs
+    try {
+      console.log(`Fetched iCal from ${url}: ${String(text).slice(0, 200).replace(/\n/g, ' ')}...`);
+    } catch {}
 
     return {
       statusCode: 200,
