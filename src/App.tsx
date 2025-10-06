@@ -227,7 +227,8 @@ function App() {
         <TimelineCalendar
           startDate={timelineStart}
           endDate={timelineEnd}
-          events={events}
+          // Only show events that haven't already ended before the timeline start
+          events={events.filter(e => e.endDate >= timelineStart)}
           units={ICAL_SOURCES.map(s => ({ key: s.key, label: s.label, color: s.color }))}
           scrollToDate={currentDate}
           onEventClick={(ev) => {
