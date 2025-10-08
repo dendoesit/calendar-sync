@@ -16,13 +16,27 @@ const writeToJsonBin = async (content) => {
     },
     body: JSON.stringify(content),
   });
-  if (!res.ok) throw new Error(`jsonbin write failed ${res.status}`);
+  if (!res.ok) {
+    let bodyText = '';
+    try {
+      bodyText = await res.text();
+    } catch (e) {
+      bodyText = '<failed to read body>';
+    }
+    throw new Error(`jsonbin write failed ${res.status} ${bodyText}`);
+  }
   return true;
 };
 
 export async function handler(event) {
   try {
-    const body = event.body ? JSON.parse(event.body) : {};
+    let body = {};
+    try {
+      body = event.body ? JSON.parse(event.body) : {};
+    } catch (parseErr) {
+      console.error('notes-update: invalid JSON body', parseErr, event.body);
+      return { statusCode: 400, body: JSON.stringify({ error: 'invalid json body' }) };
+    }
     const content = body.content || {};
 
     // If JSONBIN is configured, try to write there first
@@ -35,8 +49,21 @@ export async function handler(event) {
           body: JSON.stringify({ ok: true, backend: 'jsonbin' }),
         };
       } catch (err) {
-        console.error('notes-update jsonbin failed, falling back to file:', err);
-        // fall through to file fallback
+        console.error('notes-update jsonbin failed:', err);
+        // Do not attempt to write to the function package filesystem on Netlify
+        // (it's read-only). Return a 502 so the client knows JSONBin rejected
+        // the write (e.g. invalid key / 401). If you want a local fallback,
+        // set LOCAL_FILE_FALLBACK=true in the environment (only for dev).
+        if (!process.env.LOCAL_FILE_FALLBACK) {
+          const message = err && err.message ? err.message : String(err);
+          return {
+            statusCode: 502,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            body: JSON.stringify({ error: 'jsonbin write failed', detail: message }),
+          };
+        }
+        console.warn('LOCAL_FILE_FALLBACK enabled; falling back to file write (ephemeral)');
+        // else fall through to file write (useful for local dev only)
       }
     }
 
@@ -56,6 +83,7 @@ export async function handler(event) {
     };
   } catch (err) {
     console.error('notes-update error', err);
-    return { statusCode: 500, body: JSON.stringify({ error: 'failed to write notes' }) };
+    const message = err && err.message ? err.message : String(err);
+    return { statusCode: 500, body: JSON.stringify({ error: 'failed to write notes', detail: message }) };
   }
 }
