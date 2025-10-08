@@ -27,26 +27,46 @@ const localSaveAll = (map: Record<string, NoteEntry>) => {
   }
 };
 
+// Server interactions: the client will read from and push to a shared JSON
+// exposed via Netlify functions. We still keep localStorage as the immediate
+// source for UI, but the server is the authoritative source when available.
+
 const fetchServerNotes = async (): Promise<Record<string, NoteEntry> | null> => {
   try {
     const res = await fetch('/.netlify/functions/notes-get');
     if (!res.ok) return null;
     const json = await res.json();
-    return json as Record<string, NoteEntry>;
-  } catch {
+    // Support two shapes coming from the server:
+    // 1) a map/object { <id>: { content, savedAt, ttlDays }, ... }
+    // 2) an envelope { notes: [ { id, content, savedAt, ttlDays }, ... ] }
+    if (json && Array.isArray(json.notes)) {
+      const map: Record<string, NoteEntry> = {};
+      for (const item of json.notes) {
+        if (!item || !item.id) continue;
+        map[item.id] = { content: item.content, savedAt: item.savedAt, ttlDays: item.ttlDays };
+      }
+      return map;
+    }
+    return (json as Record<string, NoteEntry>) || null;
+  } catch (err) {
+    console.debug('notesStore fetchServerNotes failed', err);
     return null;
   }
 };
 
 const pushServerNotes = async (map: Record<string, NoteEntry>) => {
   try {
+    // Convert internal map to envelope { notes: [ { id, ... }, ... ] }
+    const notesArray = Object.keys(map).map((id) => ({ id, ...map[id] }));
+    const payload = { content: { notes: notesArray }, message: 'Update notes' };
     const res = await fetch('/.netlify/functions/notes-update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: map, message: 'Update notes' }),
+      body: JSON.stringify(payload),
     });
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.debug('notesStore pushServerNotes failed', err);
     return false;
   }
 };
@@ -66,13 +86,20 @@ export const cleanupExpired = () => {
   if (changed) localSaveAll(map);
 };
 
-// Populate local store from server once on load (best-effort merge)
+// On module load, try to load authoritative notes from server (best-effort).
+// If server returns a map, replace local store with server contents so UI
+// reflects the centrally stored notes. If server is unreachable, keep local.
 (async () => {
   try {
     const server = await fetchServerNotes();
     if (server) {
-      // merge into local (server wins)
-      localSaveAll({ ...(localLoadAll() || {}), ...server });
+      localSaveAll(server);
+      try {
+        window.dispatchEvent(new CustomEvent('notes:loaded', { detail: { fromServer: true } }));
+      } catch (err) {
+        // ignore non-fatal dispatch errors
+        console.debug('notesStore dispatch notes:loaded failed', err);
+      }
     }
   } catch (err) {
     console.debug('notesStore server preload failed', err);
@@ -103,14 +130,20 @@ export const saveNoteForEvent = (event: CalendarEvent, content: string, ttlDays 
   map[id] = entry;
   localSaveAll(map);
 
-  // push in background
+  // Dispatch an event so other parts of the app (or external listeners)
+  // can react immediately to the note being saved.
+  try {
+    window.dispatchEvent(new CustomEvent('notes:updated', { detail: { id, entry } }));
+  } catch (err) {
+    console.debug('notesStore dispatch notes:updated failed', err);
+  }
+
+  // push to server in background (best-effort). We don't block the UI.
   (async () => {
     try {
-      const server = (await fetchServerNotes()) || {};
-      server[id] = entry;
-      await pushServerNotes(server);
+      await pushServerNotes(localLoadAll());
     } catch (err) {
-      console.debug('notesStore push failed', err);
+      console.debug('notesStore background push failed', err);
     }
   })();
 };
@@ -123,15 +156,17 @@ export const deleteNoteForEvent = (event: CalendarEvent) => {
     localSaveAll(map);
   }
 
+  try {
+    window.dispatchEvent(new CustomEvent('notes:deleted', { detail: { id } }));
+  } catch (err) {
+    console.debug('notesStore dispatch notes:deleted failed', err);
+  }
+
   (async () => {
     try {
-      const server = (await fetchServerNotes()) || {};
-      if (server[id]) {
-        delete server[id];
-        await pushServerNotes(server);
-      }
+      await pushServerNotes(localLoadAll());
     } catch (err) {
-      console.debug('notesStore delete push failed', err);
+      console.debug('notesStore background delete push failed', err);
     }
   })();
 };
