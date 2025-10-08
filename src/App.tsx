@@ -21,6 +21,7 @@ function App() {
   const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false);
   const [isEventDetailsModalOpen, setIsEventDetailsModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Load events from localStorage
   useEffect(() => {
@@ -58,7 +59,14 @@ function App() {
   // Fetch iCal and merge
   const handleSync = async () => {
     const providers = ['airbnb', 'booking'];
-    const fetched: CalendarEvent[] = [];
+    setIsSyncing(true);
+    // remove all imported events immediately so pills disappear during fetch
+    setEvents(prev => prev.filter(e => e.type === 'manual'));
+  const fetched: CalendarEvent[] = [];
+  try {
+    // Preserve manual events separately so we can filter incoming events against them
+    // (we don't want existing imported events to block newly fetched ones).
+    const existingManual = events.filter(e => e.type === 'manual');
 
     for (const src of ICAL_SOURCES) {
       if (!src.enabled) continue;
@@ -80,8 +88,8 @@ function App() {
 
           const verified = normalized.filter(e => e.startDate <= e.endDate);
 
-          // Remove events fully subsumed by existing events
-          const filtered = verified.filter(ev => !isSubsumedByExisting(ev, events));
+          // Remove events fully subsumed by existing manual events only
+          const filtered = verified.filter(ev => !isSubsumedByExisting(ev, existingManual));
 
           fetched.push(...filtered);
         } catch (err) {
@@ -90,8 +98,19 @@ function App() {
       }
     }
 
-    // Deduplicate exact duplicates
-    setEvents(prev => [...prev, ...dedupeIncoming(prev, fetched)]);
+    // Replace previously imported events with freshly fetched ones (preserve manual events)
+        const dedupedFetched = dedupeIncoming([], fetched); // dedupe within fetched list
+        setEvents(() => {
+          if (dedupedFetched.length) {
+            console.log(`Sync: replaced imported events with ${dedupedFetched.length} freshly fetched events`);
+            return [...existingManual, ...dedupedFetched];
+          }
+          console.log('Sync: no imported events fetched');
+          return existingManual;
+        });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   useEffect(() => {
@@ -139,6 +158,7 @@ function App() {
           onNextMonth={handleNextMonth}
           onAddEventClick={() => setIsAddEventModalOpen(true)}
           onSync={handleSync}
+          isSyncing={isSyncing}
         />
 
         <TimelineCalendar
